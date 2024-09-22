@@ -1,0 +1,28 @@
+[package]
+name = "tower-memlim"
+version = "0.1.0"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/sdtnjung/tower-memlim"
+description = """
+tower-memlim is a Tower based middleware layer to limit requests based on 
+the host's computer memory usage.
+"""
+categories = ["asynchronous", "network-programming"]
+keywords = ["memory", "limit", "layer", "tower", "service"]
+edition = "2018"
+rust-version = "1.64.0"
+
+[dependencies]
+cgroup-memory = "0.1.0"
+futures-core = "0.3.30"
+pin-project-lite = "0.2.14"
+tower-layer = "0.3.3"
+tower-service = "0.3.3"
+
+[dev-dependencies]
+futures-util = "0.3.30"
+tokio = { version = "1.38.1", features = ["sync", "macros", "rt"] }
+tower-test = "0.4.0"
+tokio-test = "0.4.4"
+tower = { version = "0.5.1", features = ["load-shed", "util"] }
