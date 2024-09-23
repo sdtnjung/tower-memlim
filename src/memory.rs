@@ -4,8 +4,13 @@ use cgroup_memory::memory_available;
 
 use crate::error::BoxError;
 
+/// Memory threshold.
+/// 
+/// Requests are limited once the threshold is exceeded. The concrete
+/// definition of exceeded depends on Threshold's enum variant.
 #[derive(Clone, Debug)]
 pub enum Threshold {
+    /// Threshold is exceeded when the available memory is less than the given number of bytes.
     MinAvailableBytes(u64),
 }
 

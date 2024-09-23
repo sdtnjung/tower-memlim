@@ -8,7 +8,6 @@ use crate::{
     memory::{AvailableMemory, Threshold},
 };
 
-
 /// Enforces a limit on the underlying service when a memory threshold is met.
 #[derive(Debug)]
 pub struct MemoryLimit<T, M>
@@ -18,7 +17,7 @@ where
     inner: T,
     threshold: Threshold,
     mem_checker: M,
-    err: Option<MemCheckFailure>,
+    is_ready: bool,
 }
 
 impl<T, M> MemoryLimit<T, M>
@@ -31,7 +30,7 @@ where
             inner,
             threshold,
             mem_checker,
-            err: None,
+            is_ready: false,
         }
     }
 
@@ -68,6 +67,8 @@ where
                 Ok(v) => {
                     if v < min_m as usize {
                         return Poll::Pending;
+                    } else {
+                        self.is_ready = true;
                     }
                 }
                 Err(e) => return Poll::Ready(Err(MemCheckFailure::new(e).into())),
@@ -78,10 +79,24 @@ where
     }
 
     fn call(&mut self, request: Request) -> Self::Future {
-        if let Some(e) = self.err.take() {
-            return ResponseFuture::failed(e);
-        } else {
+        if self.is_ready {
             ResponseFuture::called(self.inner.call(request))
+        } else {
+            panic!("service not ready; poll_ready must be called first")
+        }
+    }
+}
+
+impl<S: Clone, M> Clone for MemoryLimit<S, M>
+where
+    M: AvailableMemory,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            threshold: self.threshold.clone(),
+            mem_checker: self.mem_checker.clone(),
+            is_ready: false,
         }
     }
 }

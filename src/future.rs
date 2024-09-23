@@ -39,12 +39,6 @@ impl<F> ResponseFuture<F> {
             state: ResponseState::Called { fut },
         }
     }
-
-    pub(crate) fn failed(e: super::error::MemCheckFailure) -> Self {
-        ResponseFuture {
-            state: ResponseState::MemCheckFailure { e },
-        }
-    }
 }
 
 impl<F, T, E> Future for ResponseFuture<F>
