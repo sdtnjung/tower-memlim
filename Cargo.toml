@@ -1,6 +1,6 @@
 [package]
 name = "tower-memlim"
-version = "0.2.0"
+version = "0.3.0"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/sdtnjung/tower-memlim"
@@ -17,6 +17,7 @@ rust-version = "1.64.0"
 cgroup-memory = "0.1.0"
 futures-core = "0.3.30"
 pin-project-lite = "0.2.14"
+tokio = "1.38.1"
 tower-layer = "0.3.3"
 tower-service = "0.3.3"
 

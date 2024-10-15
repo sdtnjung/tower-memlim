@@ -16,7 +16,7 @@ pub enum Threshold {
 
 pub trait AvailableMemory
 where
-    Self: Clone,
+    Self: Clone + Send + 'static,
 {
     fn available_memory(&self) -> Result<usize, BoxError>;
 }

@@ -3,9 +3,9 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
+    time::Duration,
     usize,
 };
-
 use tokio_test::{assert_pending, assert_ready_err, assert_ready_ok};
 use tower::{load_shed::error::Overloaded, service_fn, util::ServiceExt};
 use tower::{Service, ServiceBuilder};
@@ -22,7 +22,7 @@ async fn service_fn_handle(_request: &str) -> Result<&str, BoxError> {
     Ok("Hello, World!")
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct AvailableMemoryStub {
     current: Arc<AtomicUsize>,
 }
@@ -34,6 +34,35 @@ impl AvailableMemory for AvailableMemoryStub {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn test_waker() {
+    let av_memory: Arc<AtomicUsize> = Arc::new(0.into());
+    let layer = MemoryLimitLayer::new(
+        Threshold::MinAvailableBytes(10),
+        AvailableMemoryStub {
+            current: av_memory.clone(),
+        },
+    );
+
+    let mut svc = ServiceBuilder::new()
+        .layer(layer)
+        .service(service_fn(service_fn_handle));
+
+    let mut mock = tokio_test::task::spawn(svc.ready());
+
+    assert!(mock.poll().is_pending());
+
+    assert!(!mock.is_woken());
+
+    av_memory.store(usize::MAX, Ordering::SeqCst);
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    assert!(mock.is_woken());
+
+    assert!(mock.poll().is_ready());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn test_basis_with_functional_mem_provider_stub() {
     let av_memory: Arc<AtomicUsize> = Arc::new(10.into());
     let layer = MemoryLimitLayer::new(
@@ -42,7 +71,7 @@ async fn test_basis_with_functional_mem_provider_stub() {
             current: av_memory.clone(),
         },
     );
-    let (mut service, _handle) = mock::spawn_layer(layer);
+    let (mut service, _handle) = tower_test::mock::spawn_layer(layer);
 
     assert_ready_ok!(service.poll_ready());
 

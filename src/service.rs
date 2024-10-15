@@ -1,6 +1,12 @@
+use tokio::time::{Instant, Sleep};
 use tower_service::Service;
 
-use std::task::{Context, Poll};
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use crate::{
     error::{BoxError, MemCheckFailure},
@@ -17,7 +23,9 @@ where
     inner: T,
     threshold: Threshold,
     mem_checker: M,
+    retry_interval: Duration,
     is_ready: bool,
+    sleep: Pin<Box<Sleep>>,
 }
 
 impl<T, M> MemoryLimit<T, M>
@@ -25,12 +33,14 @@ where
     M: AvailableMemory,
 {
     /// Create a new memory limiter.
-    pub fn new(inner: T, threshold: Threshold, mem_checker: M) -> Self {
+    pub fn new(inner: T, threshold: Threshold, mem_checker: M, retry_interval: Duration) -> Self {
         Self {
             inner,
             threshold,
             mem_checker,
+            retry_interval,
             is_ready: false,
+            sleep: Box::pin(tokio::time::sleep(retry_interval)),
         }
     }
 
@@ -66,16 +76,29 @@ where
             Threshold::MinAvailableBytes(min_m) => match self.mem_checker.available_memory() {
                 Ok(v) => {
                     if v < min_m as usize {
-                        return Poll::Pending;
+                        // Reset sleep
+                        self.sleep
+                            .as_mut()
+                            .reset(Instant::now() + self.retry_interval);
+
+                        // Wake up after sleep
+                        match self.sleep.as_mut().poll(cx) {
+                            Poll::Ready(_r) => {
+                                // Unlikely as we just reset the Sleep but we handle it
+                                cx.waker().wake_by_ref();
+                            }
+                            Poll::Pending => (),
+                        }
+
+                        Poll::Pending
                     } else {
                         self.is_ready = true;
+                        self.inner.poll_ready(cx).map_err(Into::into)
                     }
                 }
-                Err(e) => return Poll::Ready(Err(MemCheckFailure::new(e).into())),
+                Err(e) => Poll::Ready(Err(MemCheckFailure::new(e).into())),
             },
         }
-
-        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, request: Request) -> Self::Future {
@@ -96,7 +119,9 @@ where
             inner: self.inner.clone(),
             threshold: self.threshold.clone(),
             mem_checker: self.mem_checker.clone(),
+            retry_interval: self.retry_interval,
             is_ready: false,
+            sleep: Box::pin(tokio::time::sleep(self.retry_interval)),
         }
     }
 }

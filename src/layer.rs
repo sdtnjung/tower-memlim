@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     error::BoxError,
     memory::{AvailableMemory, Threshold},
@@ -16,6 +18,10 @@ where
     M: AvailableMemory,
 {
     threshold: Threshold,
+    /// Interval in which the next memory check is performed, if the threshold is exceeded.
+    ///
+    /// The `retryìnterval` has no effect if this layer is wrapped within a load shed layer.
+    retry_interval: std::time::Duration,
     /// Memory stats provider
     provider: M,
 }
@@ -30,11 +36,21 @@ where
         self.provider.available_memory()
     }
 
-    /// Create a new concurrency limit layer.
+    /// Create a new concurrency limit layer with a default [MemoryLimitLayer::retry_interval] of 50ms.
     pub const fn new(threshold: Threshold, provider: M) -> Self {
         MemoryLimitLayer {
             threshold,
             provider,
+            retry_interval: std::time::Duration::from_millis(50),
+        }
+    }
+
+    /// Set a custom [MemoryLimitLayer::retry_interval] which determines when the next memory check is performed, if the threshold is exceeded.
+    pub fn with_retry_interval(self, retry_interval: Duration) -> Self {
+        MemoryLimitLayer {
+            threshold: self.threshold,
+            provider: self.provider,
+            retry_interval,
         }
     }
 }
@@ -46,6 +62,11 @@ where
     type Service = MemoryLimit<S, M>;
 
     fn layer(&self, service: S) -> Self::Service {
-        MemoryLimit::new(service, self.threshold.clone(), self.provider.clone())
+        MemoryLimit::new(
+            service,
+            self.threshold.clone(),
+            self.provider.clone(),
+            self.retry_interval,
+        )
     }
 }
